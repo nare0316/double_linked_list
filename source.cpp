@@ -1,4 +1,16 @@
 #include <iostream>
+#include <type_traits>
+
+template <typename T>
+T&& forward(std::remove_reference_t<T>& arg) {
+    return static_cast<T&&>(arg);
+}
+
+template <typename T>
+T&& forward(std::remove_reference_t<T>&& arg) {
+    static_assert(!std::is_lvalue_reference_v<T>);
+    return static_cast<T&&>(arg);
+}
 
 template <typename T>
 struct Node {
@@ -7,6 +19,8 @@ struct Node {
         Node<T>* prev;
         Node<T>* next;
     public:
+        template <typename ... Types>
+        Node(Types ... args) : val(std::forward<Types>(args)...), prev(nullptr), next(nullptr) {}
         Node() : val(), prev(nullptr), next(nullptr) { }          
         Node(const T& val) : val(val), prev(nullptr), next(nullptr) { }  
         ~Node() = default;
@@ -350,6 +364,66 @@ class list {
                 tail = new_node;
             }
         }
+        template <typename ... Types>
+        void emplace_front(Types&& ... args) {
+            Node<T> * new_node = new Node<T>(forward<Types>(args)...);
+            if (size == 0) {
+                head = tail = new_node;
+            } else {
+                new_node->next = head;
+                head->prev = new_node;
+                head = new_node;
+            }
+            ++size;
+        }
+        template <typename ... Types>
+        void emplace_back(Types&& ... args) {
+            Node<T> * new_node = new Node<T>(forward<Types>(args)...);
+            if (!head) {
+                head = new_node;
+                tail = new_node;
+            } else {
+                new_node->prev = tail;
+                tail->next = new_node;
+                tail = new_node;
+            }
+            ++size;
+        }
+
+        template <typename ... Types>
+        void emplace(int pos, Types&& ... args) {
+            if (!head) {
+                emplace_back(std::forward<Types>(args)...);
+                return;
+            }
+        
+            if (pos <= 0) {
+                emplace_front(std::forward<Types>(args)...);
+                return;
+            }
+        
+            if (pos >= size) {
+                emplace_back(std::forward<Types>(args)...);
+                return;
+            }
+        
+            Node<T>* cur = head;
+            for (int i = 0; i < pos; ++i) {
+                cur = cur->next;
+            }
+        
+            Node<T>* new_node = new Node<T>(std::forward<Types>(args)...);
+        
+            new_node->prev = cur->prev;
+            new_node->next = cur;
+        
+            cur->prev->next = new_node;
+            cur->prev = new_node;
+        
+            ++size;
+        }
+       
+
     //destructor
         ~list() {
            clear();
@@ -374,15 +448,20 @@ int main() {
     ls.insert(-2, 'k');
     ls.insert(0, 's');
     ls.insert(3, 'n');
-    assert(ls.len() == 6);
+    ls.emplace(0, 's');
+    assert(ls.len() == 7);
     ls.erase(0);
-    assert(ls.len() == 5);
-    ls.push_back('j');
+    assert(ls.len() == 6);
+    ls.push_front('j');
     ls.push_back('w');
+    ls.emplace_back('j');
+    ls.emplace_back('w');
+    ls.emplace_front('a');
+    ls.emplace_front('b');
     ls.pop_back();
     ls.pop_back();
     ls.pop_back();
-    assert(ls.len() == 4);
+    assert(ls.len() == 9);
     ls.resize(6);
     ls.resize(10);
     assert(ls.len() == 10);
